@@ -192,7 +192,7 @@ public final class IntermediateMovieRecommendation {
   }
 
   private static void resetGraph(VitalEdgeClient client) {
-    client.execute("MATCH (n:Movie|Genre|User) DETACH DELETE n");
+    client.execute("MATCH (n:Movie|Genre|User) DETACH DELETE n", null, null, false, false, false, 30.0);
   }
 
   private static void ensureIngestIndexes(VitalEdgeClient client) {

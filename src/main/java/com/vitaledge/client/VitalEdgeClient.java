@@ -115,7 +115,8 @@ public final class VitalEdgeClient implements AutoCloseable {
       Double timeoutSeconds) {
     Query.QueryRequest request =
         buildRequest(
-            bindCypherParameters(cypher, parameters),
+            cypher,
+            parameters,
             tenant,
             readOnly,
             includeStats,
@@ -193,7 +194,17 @@ public final class VitalEdgeClient implements AutoCloseable {
       boolean readOnly,
       boolean includeStats,
       boolean includeWarnings) {
-    return Query.QueryRequest.newBuilder()
+    return buildRequest(cypher, null, tenant, readOnly, includeStats, includeWarnings);
+  }
+
+  private Query.QueryRequest buildRequest(
+      String cypher,
+      Map<String, ?> parameters,
+      String tenant,
+      boolean readOnly,
+      boolean includeStats,
+      boolean includeWarnings) {
+    Query.QueryRequest.Builder builder = Query.QueryRequest.newBuilder()
         .setTenant(tenant != null ? tenant : this.tenant)
         .setInput(Query.QueryInput.newBuilder().setCypher(cypher).build())
         .setOptions(
@@ -207,8 +218,75 @@ public final class VitalEdgeClient implements AutoCloseable {
                 .setSdkLanguage(SDK_LANGUAGE)
                 .setSdkVersion(SDK_VERSION)
                 .setProtocolVersion(PROTOCOL_VERSION)
-                .build())
-        .build();
+                .build());
+    if (parameters != null && !parameters.isEmpty()) {
+      for (Map.Entry<String, ?> entry : parameters.entrySet()) {
+        builder.putParameters(entry.getKey(), toProtoValue(entry.getValue()));
+      }
+    }
+    return builder.build();
+  }
+
+  private static Query.Value toProtoValue(Object value) {
+    if (value == null) {
+      return Query.Value.newBuilder().setNullValue(Query.NullValue.newBuilder().build()).build();
+    }
+    if (value instanceof Boolean b) {
+      return Query.Value.newBuilder().setBoolValue(b).build();
+    }
+    if (value instanceof Byte b) {
+      return Query.Value.newBuilder().setIntValue(b).build();
+    }
+    if (value instanceof Short s) {
+      return Query.Value.newBuilder().setIntValue(s).build();
+    }
+    if (value instanceof Integer i) {
+      return Query.Value.newBuilder().setIntValue(i).build();
+    }
+    if (value instanceof Long l) {
+      return Query.Value.newBuilder().setIntValue(l).build();
+    }
+    if (value instanceof Float f) {
+      return Query.Value.newBuilder().setDoubleValue(f).build();
+    }
+    if (value instanceof Double d) {
+      return Query.Value.newBuilder().setDoubleValue(d).build();
+    }
+    if (value instanceof String s) {
+      return Query.Value.newBuilder().setStringValue(s).build();
+    }
+    if (value instanceof byte[] bytes) {
+      return Query.Value.newBuilder().setBytesValue(ByteString.copyFrom(bytes)).build();
+    }
+    if (value instanceof ByteString bs) {
+      return Query.Value.newBuilder().setBytesValue(bs).build();
+    }
+    if (value instanceof Map<?, ?> map) {
+      Query.MapValue.Builder mapBuilder = Query.MapValue.newBuilder();
+      for (Map.Entry<?, ?> entry : map.entrySet()) {
+        if (!(entry.getKey() instanceof String key)) {
+          throw new IllegalArgumentException("Cypher map parameter keys must be strings");
+        }
+        mapBuilder.putValues(key, toProtoValue(entry.getValue()));
+      }
+      return Query.Value.newBuilder().setMapValue(mapBuilder.build()).build();
+    }
+    if (value instanceof Iterable<?> iterable) {
+      Query.ListValue.Builder listBuilder = Query.ListValue.newBuilder();
+      for (Object item : iterable) {
+        listBuilder.addValues(toProtoValue(item));
+      }
+      return Query.Value.newBuilder().setListValue(listBuilder.build()).build();
+    }
+    if (value.getClass().isArray()) {
+      Query.ListValue.Builder listBuilder = Query.ListValue.newBuilder();
+      int length = java.lang.reflect.Array.getLength(value);
+      for (int i = 0; i < length; i++) {
+        listBuilder.addValues(toProtoValue(java.lang.reflect.Array.get(value, i)));
+      }
+      return Query.Value.newBuilder().setListValue(listBuilder.build()).build();
+    }
+    throw new IllegalArgumentException("Unsupported Cypher parameter type: " + value.getClass().getName());
   }
 
   private static QueryResult toQueryResult(Query.QueryResponse response) {

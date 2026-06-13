@@ -88,3 +88,6 @@ nb-configuration.xml
 ## Miscellaneous
 ##############################
 *.log
+
+# exclude external datasets used in examples
+examples/*.csv

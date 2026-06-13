@@ -23,8 +23,11 @@ fi
 
 cd "${REPO_ROOT}"
 
+JAVA_BIN="${JAVA_HOME:+${JAVA_HOME}/bin/java}"
+JAVA_BIN="${JAVA_BIN:-java}"
+
 "${MAVEN_BIN}" \
   -Dvitaledge.proto.root="${PROTO_ROOT}" \
-  -Dexec.mainClass="${MAIN_CLASS}" \
-  -Dexec.cleanupDaemonThreads=false \
-  exec:java
+  -Dexec.executable="${JAVA_BIN}" \
+  "-Dexec.args=-classpath %classpath ${MAIN_CLASS} ${ARGS[*]}" \
+  compile exec:exec
