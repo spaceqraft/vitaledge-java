@@ -99,9 +99,9 @@ public final class IntermediateMovieRecommendation {
         values.getOrDefault("host", "localhost"),
         parseInt(values.getOrDefault("port", "7443"), 7443),
         values.getOrDefault("tenant", "movierec"),
-        Math.max(1, parseInt(values.getOrDefault("batch-size", "500"), 500)),
+        Math.max(1, parseInt(values.getOrDefault("batch-size", "1000"), 1000)),
         Math.max(1, parseInt(values.getOrDefault("edge-batch-size", "5000"), 5000)),
-        Math.max(0, parseInt(values.getOrDefault("ratings-limit", "0"), 0)),
+        Math.max(0, parseInt(values.getOrDefault("ratings-limit", "10000"), 10000)),
         Math.max(1, parseInt(values.getOrDefault("user-sample", "50"), 50)),
         Math.max(1, parseInt(values.getOrDefault("limit", "10"), 10)));
   }
