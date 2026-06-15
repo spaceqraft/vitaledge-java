@@ -14,8 +14,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
-import vitaledge.v1.Query;
-import vitaledge.v1.QueryServiceGrpc;
+import vitaledge.v1.Ddl;
+import vitaledge.v1.DdlServiceGrpc;
+import vitaledge.v1.Dml;
+import vitaledge.v1.DmlServiceGrpc;
 
 public final class VitalEdgeClient implements AutoCloseable {
   public static final String DEFAULT_HOST = "localhost";
@@ -33,7 +35,8 @@ public final class VitalEdgeClient implements AutoCloseable {
   private final Consumer<ManagedChannelBuilder<?>> channelCustomizer;
 
   private ManagedChannel channel;
-  private QueryServiceGrpc.QueryServiceBlockingStub stub;
+  private DmlServiceGrpc.DmlServiceBlockingStub stub;
+  private DdlServiceGrpc.DdlServiceBlockingStub ddlStub;
 
   public static Builder builder() {
     return new Builder();
@@ -89,7 +92,8 @@ public final class VitalEdgeClient implements AutoCloseable {
     }
 
     channel = builder.build();
-    stub = QueryServiceGrpc.newBlockingStub(channel);
+    stub = DmlServiceGrpc.newBlockingStub(channel);
+    ddlStub = DdlServiceGrpc.newBlockingStub(channel);
   }
 
   @Override
@@ -98,6 +102,7 @@ public final class VitalEdgeClient implements AutoCloseable {
       channel.shutdownNow();
       channel = null;
       stub = null;
+      ddlStub = null;
     }
   }
 
@@ -113,7 +118,7 @@ public final class VitalEdgeClient implements AutoCloseable {
       boolean includeStats,
       boolean includeWarnings,
       Double timeoutSeconds) {
-    Query.QueryRequest request =
+    Dml.QueryRequest request =
         buildRequest(
             cypher,
             parameters,
@@ -122,7 +127,7 @@ public final class VitalEdgeClient implements AutoCloseable {
             includeStats,
             includeWarnings);
 
-    Query.QueryResponse response =
+    Dml.QueryResponse response =
         timeoutSeconds == null
             ? stub.execute(request)
             : stub.withDeadlineAfter(secondsToMillis(timeoutSeconds), java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -135,8 +140,8 @@ public final class VitalEdgeClient implements AutoCloseable {
   }
 
   public ExplainResult explain(String cypher, String tenant, Double timeoutSeconds) {
-    Query.QueryRequest request = buildRequest(cypher, tenant, false, false, false);
-    Query.ExplainResponse response =
+    Dml.QueryRequest request = buildRequest(cypher, tenant, false, false, false);
+    Dml.ExplainResponse response =
         timeoutSeconds == null
             ? stub.explain(request)
             : stub.withDeadlineAfter(secondsToMillis(timeoutSeconds), java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -149,11 +154,11 @@ public final class VitalEdgeClient implements AutoCloseable {
   }
 
   public Capabilities getCapabilities(Double timeoutSeconds) {
-    Query.CapabilitiesResponse response =
+    Dml.CapabilitiesResponse response =
         timeoutSeconds == null
-        ? stub.getCapabilities(Query.CapabilitiesRequest.newBuilder().build())
+        ? stub.getCapabilities(Dml.CapabilitiesRequest.newBuilder().build())
             : stub.withDeadlineAfter(secondsToMillis(timeoutSeconds), java.util.concurrent.TimeUnit.MILLISECONDS)
-          .getCapabilities(Query.CapabilitiesRequest.newBuilder().build());
+          .getCapabilities(Dml.CapabilitiesRequest.newBuilder().build());
     return new Capabilities(
         response.getProtocolVersion(),
         response.getParserVersionsList(),
@@ -162,33 +167,59 @@ public final class VitalEdgeClient implements AutoCloseable {
         response.getParameterBinding());
   }
 
-  public CreatePropertyIndexResult createPropertyIndex(String schema, String property) {
-    return createPropertyIndex(schema, property, null, false, null);
+  public CreatePropertyIndexResult createVertexPropertyIndex(String schema, String property) {
+    return createVertexPropertyIndex(schema, property, null, true, null);
   }
 
-  public CreatePropertyIndexResult createPropertyIndex(
+  public CreatePropertyIndexResult createVertexPropertyIndex(
       String schema,
       String property,
       String tenant,
       boolean ifNotExists,
       Double timeoutSeconds) {
-    Query.CreatePropertyIndexRequest request =
-        Query.CreatePropertyIndexRequest.newBuilder()
+    Ddl.CreateVertexPropertyIndexRequest request =
+        Ddl.CreateVertexPropertyIndexRequest.newBuilder()
             .setTenant(tenant != null ? tenant : this.tenant)
             .setSchema(Objects.requireNonNull(schema, "schema"))
             .setProperty(Objects.requireNonNull(property, "property"))
             .setIfNotExists(ifNotExists)
             .build();
 
-    Query.CreatePropertyIndexResponse response =
+    Ddl.CreateVertexPropertyIndexResponse response =
         timeoutSeconds == null
-            ? stub.createPropertyIndex(request)
-            : stub.withDeadlineAfter(secondsToMillis(timeoutSeconds), java.util.concurrent.TimeUnit.MILLISECONDS)
-                .createPropertyIndex(request);
+            ? ddlStub.createVertexPropertyIndex(request)
+            : ddlStub.withDeadlineAfter(secondsToMillis(timeoutSeconds), java.util.concurrent.TimeUnit.MILLISECONDS)
+                .createVertexPropertyIndex(request);
     return new CreatePropertyIndexResult(response.getCreated(), response.getIndexedEntities());
   }
 
-  private Query.QueryRequest buildRequest(
+  public CreatePropertyIndexResult createEdgePropertyIndex(String schema, String property) {
+    return createEdgePropertyIndex(schema, property, null, true, null);
+  }
+
+  public CreatePropertyIndexResult createEdgePropertyIndex(
+      String schema,
+      String property,
+      String tenant,
+      boolean ifNotExists,
+      Double timeoutSeconds) {
+    Ddl.CreateEdgePropertyIndexRequest request =
+        Ddl.CreateEdgePropertyIndexRequest.newBuilder()
+            .setTenant(tenant != null ? tenant : this.tenant)
+            .setSchema(Objects.requireNonNull(schema, "schema"))
+            .setProperty(Objects.requireNonNull(property, "property"))
+            .setIfNotExists(ifNotExists)
+            .build();
+
+    Ddl.CreateEdgePropertyIndexResponse response =
+        timeoutSeconds == null
+            ? ddlStub.createEdgePropertyIndex(request)
+            : ddlStub.withDeadlineAfter(secondsToMillis(timeoutSeconds), java.util.concurrent.TimeUnit.MILLISECONDS)
+                .createEdgePropertyIndex(request);
+    return new CreatePropertyIndexResult(response.getCreated(), response.getIndexedEntities());
+  }
+
+  private Dml.QueryRequest buildRequest(
       String cypher,
       String tenant,
       boolean readOnly,
@@ -197,24 +228,24 @@ public final class VitalEdgeClient implements AutoCloseable {
     return buildRequest(cypher, null, tenant, readOnly, includeStats, includeWarnings);
   }
 
-  private Query.QueryRequest buildRequest(
+  private Dml.QueryRequest buildRequest(
       String cypher,
       Map<String, ?> parameters,
       String tenant,
       boolean readOnly,
       boolean includeStats,
       boolean includeWarnings) {
-    Query.QueryRequest.Builder builder = Query.QueryRequest.newBuilder()
+    Dml.QueryRequest.Builder builder = Dml.QueryRequest.newBuilder()
         .setTenant(tenant != null ? tenant : this.tenant)
-        .setInput(Query.QueryInput.newBuilder().setCypher(cypher).build())
+        .setInput(Dml.QueryInput.newBuilder().setCypher(cypher).build())
         .setOptions(
-            Query.RequestOptions.newBuilder()
+            Dml.RequestOptions.newBuilder()
                 .setReadOnly(readOnly)
                 .setIncludeStats(includeStats)
                 .setIncludeWarnings(includeWarnings)
                 .build())
         .setClient(
-            Query.ClientContext.newBuilder()
+            Dml.ClientContext.newBuilder()
                 .setSdkLanguage(SDK_LANGUAGE)
                 .setSdkVersion(SDK_VERSION)
                 .setProtocolVersion(PROTOCOL_VERSION)
@@ -227,105 +258,105 @@ public final class VitalEdgeClient implements AutoCloseable {
     return builder.build();
   }
 
-  private static Query.Value toProtoValue(Object value) {
+  private static Dml.Value toProtoValue(Object value) {
     if (value == null) {
-      return Query.Value.newBuilder().setNullValue(Query.NullValue.newBuilder().build()).build();
+      return Dml.Value.newBuilder().setNullValue(Dml.NullValue.newBuilder().build()).build();
     }
     if (value instanceof Boolean b) {
-      return Query.Value.newBuilder().setBoolValue(b).build();
+      return Dml.Value.newBuilder().setBoolValue(b).build();
     }
     if (value instanceof Byte b) {
-      return Query.Value.newBuilder().setIntValue(b).build();
+      return Dml.Value.newBuilder().setIntValue(b).build();
     }
     if (value instanceof Short s) {
-      return Query.Value.newBuilder().setIntValue(s).build();
+      return Dml.Value.newBuilder().setIntValue(s).build();
     }
     if (value instanceof Integer i) {
-      return Query.Value.newBuilder().setIntValue(i).build();
+      return Dml.Value.newBuilder().setIntValue(i).build();
     }
     if (value instanceof Long l) {
-      return Query.Value.newBuilder().setIntValue(l).build();
+      return Dml.Value.newBuilder().setIntValue(l).build();
     }
     if (value instanceof Float f) {
-      return Query.Value.newBuilder().setDoubleValue(f).build();
+      return Dml.Value.newBuilder().setDoubleValue(f).build();
     }
     if (value instanceof Double d) {
-      return Query.Value.newBuilder().setDoubleValue(d).build();
+      return Dml.Value.newBuilder().setDoubleValue(d).build();
     }
     if (value instanceof String s) {
-      return Query.Value.newBuilder().setStringValue(s).build();
+      return Dml.Value.newBuilder().setStringValue(s).build();
     }
     if (value instanceof byte[] bytes) {
-      return Query.Value.newBuilder().setBytesValue(ByteString.copyFrom(bytes)).build();
+      return Dml.Value.newBuilder().setBytesValue(ByteString.copyFrom(bytes)).build();
     }
     if (value instanceof ByteString bs) {
-      return Query.Value.newBuilder().setBytesValue(bs).build();
+      return Dml.Value.newBuilder().setBytesValue(bs).build();
     }
     if (value instanceof Map<?, ?> map) {
-      Query.MapValue.Builder mapBuilder = Query.MapValue.newBuilder();
+      Dml.MapValue.Builder mapBuilder = Dml.MapValue.newBuilder();
       for (Map.Entry<?, ?> entry : map.entrySet()) {
         if (!(entry.getKey() instanceof String key)) {
           throw new IllegalArgumentException("Cypher map parameter keys must be strings");
         }
         mapBuilder.putValues(key, toProtoValue(entry.getValue()));
       }
-      return Query.Value.newBuilder().setMapValue(mapBuilder.build()).build();
+      return Dml.Value.newBuilder().setMapValue(mapBuilder.build()).build();
     }
     if (value instanceof Iterable<?> iterable) {
-      Query.ListValue.Builder listBuilder = Query.ListValue.newBuilder();
+      Dml.ListValue.Builder listBuilder = Dml.ListValue.newBuilder();
       for (Object item : iterable) {
         listBuilder.addValues(toProtoValue(item));
       }
-      return Query.Value.newBuilder().setListValue(listBuilder.build()).build();
+      return Dml.Value.newBuilder().setListValue(listBuilder.build()).build();
     }
     if (value.getClass().isArray()) {
-      Query.ListValue.Builder listBuilder = Query.ListValue.newBuilder();
+      Dml.ListValue.Builder listBuilder = Dml.ListValue.newBuilder();
       int length = java.lang.reflect.Array.getLength(value);
       for (int i = 0; i < length; i++) {
         listBuilder.addValues(toProtoValue(java.lang.reflect.Array.get(value, i)));
       }
-      return Query.Value.newBuilder().setListValue(listBuilder.build()).build();
+      return Dml.Value.newBuilder().setListValue(listBuilder.build()).build();
     }
     throw new IllegalArgumentException("Unsupported Cypher parameter type: " + value.getClass().getName());
   }
 
-  private static QueryResult toQueryResult(Query.QueryResponse response) {
+  private static QueryResult toQueryResult(Dml.QueryResponse response) {
     List<String> columns = response.getColumnsList();
     List<Map<String, Object>> rows = new ArrayList<>(response.getRowsCount());
-    for (Query.Row row : response.getRowsList()) {
+    for (Dml.Row row : response.getRowsList()) {
       rows.add(toJavaMap(row.getValuesMap()));
     }
     return new QueryResult(columns, rows, toQueryStats(response.getStats()), toDiagnostics(response.getWarningsList()));
   }
 
-  private static ExplainResult toExplainResult(Query.ExplainResponse response) {
+  private static ExplainResult toExplainResult(Dml.ExplainResponse response) {
     return new ExplainResult(
         response.getExplainJson(),
         toQueryStats(response.getStats()),
         toDiagnostics(response.getWarningsList()));
   }
 
-  private static QueryStats toQueryStats(Query.QueryStats stats) {
+  private static QueryStats toQueryStats(Dml.QueryStats stats) {
     return new QueryStats(stats.getRowsReturned(), stats.getDurationMs());
   }
 
-  private static List<Diagnostic> toDiagnostics(List<Query.Diagnostic> warnings) {
+  private static List<Diagnostic> toDiagnostics(List<Dml.Diagnostic> warnings) {
     List<Diagnostic> diagnostics = new ArrayList<>(warnings.size());
-    for (Query.Diagnostic warning : warnings) {
+    for (Dml.Diagnostic warning : warnings) {
       diagnostics.add(new Diagnostic(warning.getCode(), warning.getMessage()));
     }
     return Collections.unmodifiableList(diagnostics);
   }
 
-  private static Map<String, Object> toJavaMap(Map<String, Query.Value> values) {
+  private static Map<String, Object> toJavaMap(Map<String, Dml.Value> values) {
     Map<String, Object> result = new LinkedHashMap<>(values.size());
-    for (Map.Entry<String, Query.Value> entry : values.entrySet()) {
+    for (Map.Entry<String, Dml.Value> entry : values.entrySet()) {
       result.put(entry.getKey(), valueToJava(entry.getValue()));
     }
     return result;
   }
 
-  private static Object valueToJava(Query.Value value) {
+  private static Object valueToJava(Dml.Value value) {
     return switch (value.getKindCase()) {
       case BOOL_VALUE -> value.getBoolValue();
       case INT_VALUE -> value.getIntValue();
@@ -334,7 +365,7 @@ public final class VitalEdgeClient implements AutoCloseable {
       case BYTES_VALUE -> value.getBytesValue();
       case LIST_VALUE -> {
         List<Object> items = new ArrayList<>(value.getListValue().getValuesCount());
-        for (Query.Value item : value.getListValue().getValuesList()) {
+        for (Dml.Value item : value.getListValue().getValuesList()) {
           items.add(valueToJava(item));
         }
         yield Collections.unmodifiableList(items);

@@ -228,6 +228,13 @@ public final class AdvancedCyberThreatDetection {
       MATCH (f:Host|Flow)
       DETACH DELETE f
       """);
+
+      client.createVertexPropertyIndex("Host", "ip");
+      client.createVertexPropertyIndex("Flow", "protocol");
+      client.createVertexPropertyIndex("Flow", "detected_malicious");
+      client.createVertexPropertyIndex("Flow", "suspicious_flows");
+      client.createVertexPropertyIndex("Flow", "distinct_targets");
+      client.createVertexPropertyIndex("Flow", "distinct_ports");
   }
 
   private static void ingestFlows(VitalEdgeClient client, List<FlowRecord> records, int batchSize) {

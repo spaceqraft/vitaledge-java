@@ -192,20 +192,34 @@ public final class IntermediateMovieRecommendation {
   }
 
   private static void resetGraph(VitalEdgeClient client) {
-    client.execute("MATCH (n:Movie|Genre|User) DETACH DELETE n", null, null, false, false, false, 30.0);
+    client.execute("MATCH (n:Movie|Genre|User) DETACH DELETE n");
   }
 
   private static void ensureIngestIndexes(VitalEdgeClient client) {
-    List<String[]> specs = List.of(
-        new String[] {"Movie", "movie_id"},
-        new String[] {"User", "user_id"},
-        new String[] {"Genre", "genre"});
+    String[][] specs = {
+        new String[] {"Vertex","Movie", "movie_id"},
+        new String[] {"Vertex", "User", "user_id"},
+        new String[] {"Vertex", "Genre", "genre"},
+        new String[] {"Vertex", "Movie", "year"},
+        new String[] {"Vertex", "Movie", "num_ratings"},
+        new String[] {"Edge", "RATED", "rating"}
+    };
 
     for (String[] spec : specs) {
-      String schema = spec[0];
-      String property = spec[1];
+      String type = spec[0];
+      String schema = spec[1];
+      String property = spec[2];
       try {
-        CreatePropertyIndexResult result = client.createPropertyIndex(schema, property, null, true, null);
+        CreatePropertyIndexResult result;
+        if ("Vertex".equalsIgnoreCase(type)) {
+          result = client.createVertexPropertyIndex(schema, property);
+        } else if ("Edge".equalsIgnoreCase(type)) {
+          result = client.createEdgePropertyIndex(schema, property);
+        } else {
+          System.out.println("  Invalid index type: " + type);
+          continue;
+        }
+
         String state = result.created() ? "created" : "already exists";
         System.out.println(
             "  Index " + schema + "." + property + ": " + state
